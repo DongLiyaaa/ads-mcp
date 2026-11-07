@@ -91,6 +91,10 @@ class OperationInput(Input):
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 
+class SyncInput(Input):
+    days: Literal[1, 7]
+
+
 class ApprovalInput(Input):
     confirm_text: str
     payload_hash: str = Field(min_length=64, max_length=64)
@@ -363,6 +367,10 @@ def create_app(settings=None, service=None):
             data.idempotency_key,
             "read",
         )
+
+    @app.post("/api/accounts/{account_id}/sync")
+    def sync(account_id: str, data: SyncInput, actor=Depends(session_actor)):
+        return service.sync_reports(actor, account_id, data.days)
 
     @app.post("/api/reports")
     def report(data: OperationInput, actor=Depends(session_actor)):

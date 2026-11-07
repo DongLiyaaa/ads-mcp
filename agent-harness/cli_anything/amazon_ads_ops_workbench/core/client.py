@@ -1430,19 +1430,42 @@ class AmazonAdsClient:
             raise RuntimeError(f"{label} failed: payload is not an object")
         return data
 
-    def query_campaign_ids(self, access_token: str, profile_id: str, ad_product: str) -> list[str]:
-        ids: list[str] = []
+    def query_campaigns(
+        self,
+        access_token: str,
+        profile_id: str,
+        ad_product: str,
+        states: list[str] | None = None,
+        campaign_ids: list[str] | None = None,
+        name: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Campaigns of one ad product through the unified API v1, following nextToken."""
+        campaigns: list[dict[str, Any]] = []
         next_token, seen = None, set()
         while True:
             body: dict[str, Any] = {"adProductFilter": {"include": [ad_product]}, "maxResults": 100}
+            if states:
+                body["stateFilter"] = {"include": list(states)}
+            if campaign_ids:
+                body["campaignIdFilter"] = {"include": [str(c) for c in campaign_ids]}
+            if name:
+                body["nameFilter"] = {"include": [name], "queryTermMatchType": "BROAD_MATCH"}
             if next_token:
                 body["nextToken"] = next_token
             data = self._ads_api_send(access_token, "/adsApi/v1/query/campaigns", "Query campaigns", body, profile_id)
-            ids.extend(str(c["campaignId"]) for c in data.get("campaigns") or [] if c.get("campaignId"))
+            campaigns.extend(c for c in data.get("campaigns") or [] if isinstance(c, dict))
             next_token = data.get("nextToken")
-            if not next_token or next_token in seen:
-                return ids
+            if (limit and len(campaigns) >= limit) or not next_token or next_token in seen:
+                return campaigns[:limit] if limit else campaigns
             seen.add(next_token)
+
+    def query_campaign_ids(self, access_token: str, profile_id: str, ad_product: str) -> list[str]:
+        return [
+            str(c["campaignId"])
+            for c in self.query_campaigns(access_token, profile_id, ad_product)
+            if c.get("campaignId")
+        ]
 
     def advertiser_account_id(self, access_token: str, profile_id: str) -> str:
         from .unified_reports import pick_advertiser_account

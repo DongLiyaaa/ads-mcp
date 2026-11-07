@@ -14,7 +14,7 @@ import {
   columnLabel,
   formatCell,
   isAdditiveColumn,
-  isNumericColumn,
+  numericColumns,
   orderColumns,
 } from "../lib/reportColumns";
 import type { AmcPrivacy, RowsPage, SummaryResult, Task } from "../lib/types";
@@ -249,7 +249,11 @@ export function ReportData() {
   const newType = taskId.startsWith(NEW) ? taskId.slice(NEW.length) : "";
   const amcType = taskId.startsWith(AMC) ? taskId.slice(AMC.length) : "";
   const columns = useMemo(() => orderColumns(page?.rows || []), [page]);
-  const dimensions = columns.filter((k) => !isNumericColumn(k));
+  const numeric = useMemo(
+    () => numericColumns(columns, page?.rows || []),
+    [columns, page],
+  );
+  const dimensions = columns.filter((k) => !numeric.has(k));
   const metrics = useMemo(() => columns.filter(isAdditiveColumn), [columns]);
   // null = not chosen yet; "" = grand total only.
   const group =
@@ -471,7 +475,7 @@ export function ReportData() {
                             scope="col"
                             title={k}
                             className={
-                              isNumericColumn(k) ? "numeric" : undefined
+                              numeric.has(k) ? "numeric" : undefined
                             }
                           >
                             {columnLabel(k)}
@@ -488,7 +492,7 @@ export function ReportData() {
                               <td
                                 key={k}
                                 className={
-                                  isNumericColumn(k) ? "numeric" : undefined
+                                  numeric.has(k) ? "numeric" : undefined
                                 }
                               >
                                 {formatCell(k, r?.[k])}

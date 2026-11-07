@@ -24,7 +24,7 @@ export function Topbar({
           menuWidth={320}
           value={accountId}
           onChange={setAccountId}
-          disabled={!accounts.length}
+          disabled={!accounts.length || !!busy}
           placeholder="尚未连接账户"
           options={accounts.map((a) => ({
             value: a.id,
@@ -41,7 +41,7 @@ export function Topbar({
       <div className="top-actions">
         <span className="sync">
           <i aria-hidden="true" className={synced ? "live" : ""} />
-          {synced ? "已同步 " + synced : "正在同步"}
+          {synced ? "状态更新 " + synced : "正在读取状态"}
         </span>
         <button
           className="icon-button"
@@ -51,7 +51,10 @@ export function Topbar({
           onClick={onRefresh}
           disabled={!!busy}
         >
-          <ArrowClockwise size={18} className={busy === "refresh" ? "spin" : ""} />
+          <ArrowClockwise
+            size={18}
+            className={busy === "refresh" ? "spin" : ""}
+          />
         </button>
       </div>
     </header>

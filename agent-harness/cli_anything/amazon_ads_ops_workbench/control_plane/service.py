@@ -1,6 +1,7 @@
 import base64
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import hashlib
 import hmac
 import re
@@ -38,7 +39,7 @@ from .security import (
     bound_hash,
     redact,
 )
-from .contracts import invoke_contract, validate_arguments
+from .contracts import invoke_contract, validate_arguments, public_catalog
 from ..core.amc import (
     public_templates as public_amc_templates,
     summarize_data_sources as summarize_amc_data_sources,
@@ -896,6 +897,62 @@ class Service:
             t.deleted_at = now()
             audit(s, actor.user_id, "token.deleted", detail={"token_id": t.id})
         return {"deleted": True}
+
+    def sync_reports(self, actor, account_id, days):
+        """Queue supported reports; stable daily keys make retries safe across tabs."""
+        if days not in (1, 7):
+            raise Problem(400, "同步范围只能为 1 天或 7 天")
+        actor.require("reports:create")
+        actor.require("ads:read")
+        with self.db.sessions() as s:
+            account = self.account(s, actor, account_id)
+            zone = account.profile.get("timezone")
+        if not zone:
+            raise Problem(400, "账户缺少时区，请先验证账户后同步")
+        try:
+            today = datetime.now(ZoneInfo(zone)).date()
+        except ZoneInfoNotFoundError:
+            raise Problem(400, "账户时区无效，请重新验证账户") from None
+        end = today - timedelta(days=1)
+        start = end - timedelta(days=days - 1)
+        tasks, failures, skipped = [], [], []
+
+        def enqueue(operation, arguments, suffix=""):
+            key = f"sync:{account_id}:{start}:{end}:{operation}:{suffix}"
+            # Hash the batch identity to keep keys below the existing API limit.
+            key = "sync:" + hashlib.sha256(key.encode()).hexdigest()
+            try:
+                tasks.append(self.create_task(actor, account_id, operation,
+                                              arguments, key, "report"))
+            except Problem as exc:
+                failures.append({"operation": operation, "detail": str(exc)})
+
+        for entry in public_catalog():
+            operation = entry["operation"]
+            if entry["kind"] == "report" and operation != "reports.create-amc-query":
+                enqueue(operation, {"start_date": str(start), "end_date": str(end),
+                                    "time_unit": "DAILY"})
+        try:
+            amc = self.amc_overview(actor, account_id)
+            if amc["available"]:
+                sources = {source["id"] for source in amc["dataSources"]}
+                for template in amc["templates"]:
+                    if template.get("category") != "full":
+                        continue
+                    if not set(template["sources"]).issubset(sources):
+                        skipped.append({"operation": template["id"], "detail": "所需 AMC 数据源未开通"})
+                        continue
+                    enqueue("reports.create-amc-query", {
+                        "template": template["id"], "start_date": str(start),
+                        "end_date": str(end), "time_zone": zone,
+                    }, template["id"])
+            else:
+                skipped.append({"operation": "AMC", "detail": amc.get("reason", "AMC 不可用")})
+        except Problem as exc:
+            failures.append({"operation": "AMC", "detail": str(exc)})
+        return {"account_id": account_id, "start_date": str(start),
+                "end_date": str(end), "timezone": zone, "tasks": tasks,
+                "failures": failures, "skipped": skipped}
 
     def create_task(self, actor, account_id, operation, arguments, key, kind):
         if not isinstance(key, str) or not 8 <= len(key) <= 120:

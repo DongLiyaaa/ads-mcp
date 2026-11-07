@@ -68,6 +68,28 @@ const COLUMNS: [string, Column][] = [
   ["detailPageViews", { label: "详情页浏览", format: "int" }],
   ["newToBrandPurchases", { label: "新客订单", format: "int" }],
   ["newToBrandSales", { label: "新客销售额", format: "money" }],
+  // Full-funnel (Reporting API v1) defaults; see core/unified_reports.py.
+  ["viewableImpressions", { label: "可见曝光", format: "int" }],
+  ["viewableRate", { label: "可见率", format: "share" }],
+  ["ctr", { label: "点击率", format: "share" }],
+  ["cpc", { label: "单次点击花费", format: "money" }],
+  ["cpm", { label: "千次曝光花费", format: "money" }],
+  ["vcpm", { label: "千次可见曝光花费", format: "money" }],
+  ["roas", { label: "ROAS", format: "share" }],
+  ["costPerPurchase", { label: "单次订单花费", format: "money" }],
+  ["purchaseRate", { label: "购买率", format: "share" }],
+  ["salesFromClicks", { label: "点击归因销售额", format: "money" }],
+  ["salesFromViews", { label: "浏览归因销售额", format: "money" }],
+  ["purchasesFromClicks", { label: "点击归因订单", format: "int" }],
+  ["purchasesFromViews", { label: "浏览归因订单", format: "int" }],
+  ["salesPromoted", { label: "推广商品销售额", format: "money" }],
+  ["salesHalo", { label: "光环销售额", format: "money" }],
+  ["addToList", { label: "加入心愿单", format: "int" }],
+  ["brandedSearches", { label: "品牌搜索", format: "int" }],
+  ["brandStorePageViews", { label: "品牌旗舰店浏览", format: "int" }],
+  ["newToBrandDetailPageViews", { label: "新客详情页浏览", format: "int" }],
+  ["userReach", { label: "触达用户", format: "int" }],
+  ["averageUserImpressionFrequency", { label: "人均曝光频次", format: "share" }],
   ["spend", { label: "花费", format: "money" }],
   ["product_sales", { label: "销售额", format: "money" }],
   ["units_sold", { label: "销量", format: "int" }],
@@ -108,6 +130,21 @@ export function isNumericColumn(key: string) {
   return !!known.get(key)?.format;
 }
 
+/**
+ * Labelled numeric columns, plus unlabelled ones (custom full-funnel fields)
+ * whose values on this page are all numbers; IDs never count.
+ */
+export function numericColumns(keys: string[], rows: Record<string, unknown>[]) {
+  return new Set(
+    keys.filter((k) => {
+      if (isNumericColumn(k)) return true;
+      if (known.has(k) || /id$/i.test(k)) return false;
+      const values = rows.map((r) => r?.[k]).filter((v) => v !== null && v !== undefined);
+      return values.length > 0 && values.every((v) => typeof v === "number");
+    }),
+  );
+}
+
 /** Known columns in a fixed business order, unknown ones after in first-seen order. */
 export function orderColumns(rows: Record<string, unknown>[]) {
   const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r ?? {}))));
@@ -143,6 +180,12 @@ const NON_ADDITIVE = new Set([
   "keywordBid",
   "costPerClick",
   "searchTermImpressionRank",
+  "cpc",
+  "cpm",
+  "vcpm",
+  "costPerPurchase",
+  // Unique users: summing across days or campaigns double-counts.
+  "userReach",
 ]);
 
 export function isAdditiveColumn(key: string) {

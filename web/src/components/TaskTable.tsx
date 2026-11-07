@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { CaretRight } from "@phosphor-icons/react";
 import {
   AMC_OPERATION,
@@ -36,52 +37,96 @@ export function TaskTable({
   emptyDetail?: string;
 }) {
   const { accounts, openTask } = useWorkspace();
+  const [search, setSearch] = useState("");
+  const filtered = useMemo(
+    () =>
+      items.filter((t) =>
+        `${taskTitle(t.operation, t.arguments)} ${accountName(accounts, t.account_id)} ${t.id}`
+          .toLowerCase()
+          .includes(search.trim().toLowerCase()),
+      ),
+    [items, accounts, search],
+  );
   if (!items.length) return <Empty title={emptyTitle} detail={emptyDetail} />;
   return (
-    <div className="table-scroll">
-      <table className="task-table">
-        <thead>
-          <tr>
-            <th>任务 / 操作</th>
-            <th>账户</th>
-            <th>状态</th>
-            <th className="numeric">数据行</th>
-            <th>创建时间</th>
-            <th>
-              <span className="visually-hidden">操作</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((t) => (
-            <tr key={t.id}>
-              <td>
-                <strong>{taskTitle(t.operation, t.arguments)}</strong>
-                <small>
-                  <span className="kind">{kindNames[t.kind] || t.kind}</span>
-                  <span className="mono">{t.operation}</span>
-                </small>
-              </td>
-              <td>{accountName(accounts, t.account_id)}</td>
-              <td>
-                <Status value={t.status} />
-              </td>
-              <td className="numeric">
-                {t.kind === "report" && t.status === "SUCCEEDED"
-                  ? t.row_count.toLocaleString()
-                  : "—"}
-              </td>
-              <td>{stamp(t.created_at)}</td>
-              <td className="row-action">
-                <button className="text-button" onClick={() => openTask(t.id)}>
-                  {t.status === "AWAITING_CONFIRMATION" ? "核对" : "查看"}
-                  <CaretRight size={14} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="table-filter">
+        <label>
+          搜索本页任务
+          <input
+            type="search"
+            value={search}
+            placeholder="任务名称、账户或任务 ID"
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        <span role="status">
+          {filtered.length} / {items.length} 条
+        </span>
+        {search && (
+          <button className="text-button" onClick={() => setSearch("")}>
+            清除筛选
+          </button>
+        )}
+      </div>
+      {!filtered.length ? (
+        <Empty title="没有匹配的任务" detail="尝试其他关键词，或清除筛选。" />
+      ) : (
+        <div
+          className="table-scroll"
+          tabIndex={0}
+          aria-label="任务列表，可横向滚动"
+        >
+          <table className="task-table">
+            <thead>
+              <tr>
+                <th>任务 / 操作</th>
+                <th>账户</th>
+                <th>状态</th>
+                <th className="numeric">数据行</th>
+                <th>创建时间</th>
+                <th>
+                  <span className="visually-hidden">操作</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((t) => (
+                <tr key={t.id}>
+                  <td>
+                    <strong>{taskTitle(t.operation, t.arguments)}</strong>
+                    <small>
+                      <span className="kind">
+                        {kindNames[t.kind] || t.kind}
+                      </span>
+                      <span className="mono">{t.operation}</span>
+                    </small>
+                  </td>
+                  <td>{accountName(accounts, t.account_id)}</td>
+                  <td>
+                    <Status value={t.status} />
+                  </td>
+                  <td className="numeric">
+                    {t.kind === "report" && t.status === "SUCCEEDED"
+                      ? t.row_count.toLocaleString()
+                      : "—"}
+                  </td>
+                  <td>{stamp(t.created_at)}</td>
+                  <td className="row-action">
+                    <button
+                      className="text-button"
+                      onClick={() => openTask(t.id)}
+                    >
+                      {t.status === "AWAITING_CONFIRMATION" ? "核对" : "查看"}
+                      <CaretRight size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   );
 }

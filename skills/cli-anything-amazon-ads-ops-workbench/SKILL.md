@@ -330,6 +330,8 @@ For SD, recommendations can cover campaigns, ad groups, product ads, product/aud
 ### Sponsored Display commands
 
 - `sd-campaigns list --marketplace US`
+- `ff-campaigns list --marketplace US [--state ENABLED] [--name KEYWORD] [--max-results 100]`
+  - Read-only list of full-funnel campaigns (全流域广告活动) through the unified API v1. Amazon API v1 does not document creating or editing full-funnel campaigns, so there are no ff-campaigns write commands.
   - Fetch and normalize Sponsored Display campaign metadata.
 - `sd-campaigns create --name "SD Retargeting" --budget 18.5 --start-date 2026-07-29 --dry-run`
   - Build one SD campaign creation payload. Without `--dry-run`, create an approval plan.
@@ -393,8 +395,11 @@ For SD, recommendations can cover campaigns, ad groups, product ads, product/aud
   - Create a Sponsored Display product ad report task.
 - `reports create-sd-targeting --start-date 2026-07-01 --end-date 2026-07-07 --time-unit DAILY`
   - Create a Sponsored Display targeting report task.
-- `reports create-full-funnel-campaigns --start-date 2026-07-01 --end-date 2026-07-07 --time-unit DAILY`
+- `reports create-full-funnel-campaigns --start-date 2026-07-01 --end-date 2026-07-07 --time-unit DAILY [--fields metric.roas --fields metric.userReach]`
   - Create a full-funnel campaign report (console: 全流域广告活动) through the unified Reporting API v1, filtered to this marketplace's full-funnel campaign IDs. Returns `campaignCount` and the unified report; when the marketplace has no full-funnel campaigns no report is created. `--time-unit` is DAILY or SUMMARY. Status and download run in the control plane worker, not `reports status`.
+  - Without `--fields` the report carries 31 default metrics (delivery, cost, sales/ROAS, click vs view attribution, promoted/halo, add to cart/list, branded searches, new-to-brand, reach). `--fields` replaces the metrics with up to 60 full-funnel fields (`metric.roas` or `roas`, comma-separated allowed); the date, currency, campaign ID and campaign name are always included. Amazon rejects some combinations (for example a field that needs a companion field); the task then fails with Amazon's explanation.
+- `ff-campaigns fields [--category Reach] [--search roas]`
+  - Local reference of the fields `--fields` accepts (672 metrics and 10 dimensions), with category, title, data-table column and whether it is a default. Without filters it returns category counts and the default set only.
 - `reports parse-sd-report --input-file <PATH>`
   - Parse a downloaded SD report into normalized JSON rows.
 

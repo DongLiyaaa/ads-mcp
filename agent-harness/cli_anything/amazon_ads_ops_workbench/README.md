@@ -160,6 +160,7 @@ cli-anything-amazon-ads-ops-workbench --json reports create-sd-ad-groups --start
 cli-anything-amazon-ads-ops-workbench --json reports create-sd-product-ads --start-date 2026-07-01 --end-date 2026-07-07
 cli-anything-amazon-ads-ops-workbench --json reports create-sd-targeting --start-date 2026-07-01 --end-date 2026-07-07
 cli-anything-amazon-ads-ops-workbench --json reports create-full-funnel-campaigns --start-date 2026-07-01 --end-date 2026-07-07
+cli-anything-amazon-ads-ops-workbench --json reports create-full-funnel-campaigns --start-date 2026-07-01 --end-date 2026-07-07 --fields metric.roas --fields metric.userReach
 cli-anything-amazon-ads-ops-workbench --json reports status --report-id <REPORT_ID>
 cli-anything-amazon-ads-ops-workbench --json reports download --report-id <REPORT_ID>
 cli-anything-amazon-ads-ops-workbench --json reports parse-search-terms --input-file ~/Downloads/spSearchTerm.json

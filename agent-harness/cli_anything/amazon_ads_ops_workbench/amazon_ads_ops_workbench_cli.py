@@ -5930,6 +5930,107 @@ def sp_raw_request(
     )
 
 
+FF_CAMPAIGN_KEYS = (
+    "campaignId",
+    "name",
+    "adProduct",
+    "state",
+    "status",
+    "startDateTime",
+    "endDateTime",
+    "marketplaceScope",
+    "marketplaces",
+    "countries",
+    "budgets",
+    "optimizations",
+    "portfolioId",
+    "creationDateTime",
+    "lastUpdatedDateTime",
+)
+
+
+@cli.group("ff-campaigns")
+def ff_campaigns() -> None:
+    """Full-funnel campaigns (全流域广告活动), read-only through the unified API v1."""
+
+
+@ff_campaigns.command("list")
+@click.option("--marketplace", default=None, help="Marketplace such as US, CA, or MX.")
+@click.option(
+    "--state",
+    "states",
+    multiple=True,
+    type=click.Choice(["ENABLED", "PAUSED", "ARCHIVED"], case_sensitive=False),
+    help="Optional campaign state filter; repeat for several.",
+)
+@click.option("--campaign-id", "campaign_ids", multiple=True, help="Optional campaign id filter; repeat for several.")
+@click.option("--name", default=None, help="Optional campaign name keyword (broad match).")
+@click.option("--max-results", default=100, type=int, help="Maximum campaigns returned, 1-1000.")
+@click.pass_context
+def ff_campaigns_list(
+    ctx: click.Context,
+    marketplace: str | None,
+    states: tuple[str, ...],
+    campaign_ids: tuple[str, ...],
+    name: str | None,
+    max_results: int,
+) -> None:
+    """List this marketplace's full-funnel campaigns (全流域广告活动); read only."""
+    if not 1 <= max_results <= 1000:
+        raise click.UsageError("max-results 必须在 1 到 1000 之间")
+    if len(campaign_ids) > 1000:
+        raise click.UsageError("campaign-id 一次最多 1000 个")
+    requested = {"states": [s.upper() for s in states], "campaignIds": list(campaign_ids), "name": name}
+    emit_live_rows(
+        ctx,
+        marketplace,
+        "ff-campaigns",
+        "campaigns",
+        requested,
+        lambda client, access_token, profile_id: client.query_campaigns(
+            access_token,
+            profile_id,
+            "FULL_FUNNEL",
+            states=requested["states"],
+            campaign_ids=list(campaign_ids),
+            name=name,
+            limit=max_results,
+        ),
+        lambda row: {key: row[key] for key in FF_CAMPAIGN_KEYS if key in row},
+    )
+
+
+@ff_campaigns.command("fields")
+@click.option("--category", default=None, help="Category keyword, such as Delivery, Reach or retail.")
+@click.option("--search", default=None, help="Keyword matched against field IDs and titles, such as roas.")
+@click.pass_context
+def ff_campaigns_fields(ctx: click.Context, category: str | None, search: str | None) -> None:
+    """Fields the full-funnel report accepts in --fields; filter by category or search to list them."""
+    from collections import Counter
+
+    from cli_anything.amazon_ads_ops_workbench.core.unified_reports import (
+        BASE_FIELDS,
+        DEFAULT_METRICS,
+        MAX_CUSTOM_FIELDS,
+        list_fields,
+    )
+
+    everything = list_fields()
+    data: dict[str, Any] = {
+        "alwaysIncluded": ["date.value | dateRange.value", *BASE_FIELDS],
+        "defaultMetrics": list(DEFAULT_METRICS),
+        "maxCustomFields": MAX_CUSTOM_FIELDS,
+        "categories": dict(Counter(f["category"] for f in everything)),
+        "totalFields": len(everything),
+    }
+    if category or search:
+        data["fields"] = list_fields(category, search)
+    else:
+        # The whole library is ~700 rows; ask for a category or keyword instead.
+        data["hint"] = "传 category 或 search 查看具体字段，例如 search=roas 或 category=Reach"
+    emit({"meta": {"mode": "reference", "status": "ok"}, "data": data}, ctx.obj["json"])
+
+
 @cli.group()
 def reports() -> None:
     """Reporting commands."""
@@ -6368,6 +6469,11 @@ def reports_create_amc_query(
 @click.option("--start-date", required=True, help="Report start date in YYYY-MM-DD.")
 @click.option("--end-date", required=True, help="Report end date in YYYY-MM-DD.")
 @click.option("--time-unit", default="DAILY", help="DAILY or SUMMARY.")
+@click.option(
+    "--fields",
+    multiple=True,
+    help="Optional metric/dimension field IDs (e.g. metric.roas or roas); empty uses the default set. See ff-campaigns fields.",
+)
 @click.pass_context
 def reports_create_full_funnel_campaigns(
     ctx: click.Context,
@@ -6375,6 +6481,7 @@ def reports_create_full_funnel_campaigns(
     start_date: str,
     end_date: str,
     time_unit: str,
+    fields: tuple[str, ...],
 ) -> None:
     """Full-funnel campaigns (全流域广告活动) report via the unified Reporting API v1."""
     from cli_anything.amazon_ads_ops_workbench.core.runtime import current_runtime
@@ -6384,7 +6491,7 @@ def reports_create_full_funnel_campaigns(
     )
 
     try:
-        plan = build_full_funnel_plan(start_date, end_date, time_unit)
+        plan = build_full_funnel_plan(start_date, end_date, time_unit, fields)
     except ValueError as exc:
         raise click.UsageError(str(exc)) from None
     runtime = current_runtime.get()

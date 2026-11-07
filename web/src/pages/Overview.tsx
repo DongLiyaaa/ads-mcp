@@ -1,3 +1,4 @@
+import { SyncActions } from "../components/SyncActions";
 import type { ReactNode } from "react";
 import {
   ArrowRight,
@@ -63,23 +64,28 @@ export function Overview() {
     <>
       <PageHeader
         title="工作概览"
-        description="账户、任务与待确认变更的实时状态，每 5 秒自动同步。"
+        description="每 5 秒刷新任务状态；使用同步按钮从 Amazon 拉取当前账户的报表。"
         actions={
-          <button
-            className="primary"
-            disabled={!accounts.length}
-            onClick={() => navigate("/reports")}
-          >
-            <Plus size={17} />
-            创建报表
-          </button>
+          <>
+            <SyncActions />
+            <button
+              className="primary"
+              disabled={!accounts.length}
+              onClick={() => navigate("/reports")}
+            >
+              <Plus size={17} />
+              创建报表
+            </button>
+          </>
         }
       />
       <section className="stats" aria-label="关键指标">
         <Stat
           label="待用户确认"
           value={pending}
-          note={pending ? "尚未提交到 Amazon，点击前往核对" : "没有等待确认的变更"}
+          note={
+            pending ? "尚未提交到 Amazon，点击前往核对" : "没有等待确认的变更"
+          }
           icon={<ShieldCheck />}
           to="/approvals"
           tone={pending ? "attention" : undefined}
@@ -115,7 +121,8 @@ export function Overview() {
           <div>
             <h3>连接你的 AI 助手</h3>
             <p>
-              生成账户范围明确的 Token，让 MCP 读取数据、创建报表和提交变更计划。
+              生成账户范围明确的 Token，让 MCP
+              读取数据、创建报表和提交变更计划。
             </p>
           </div>
           <button className="secondary" onClick={() => navigate("/tokens")}>
@@ -131,8 +138,8 @@ export function Overview() {
           <div>
             <h3>先连接一个广告账户</h3>
             <p>
-              准备 Client ID、Client Secret、Refresh Token 和站点 Profile ID，之后即可创建报表和
-              MCP Token。
+              准备 Client ID、Client Secret、Refresh Token 和站点 Profile
+              ID，之后即可创建报表和 MCP Token。
             </p>
           </div>
           <button className="primary" onClick={openAccountModal}>

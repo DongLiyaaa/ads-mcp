@@ -1,4 +1,10 @@
-import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { CheckCircle, WarningCircle, X } from "@phosphor-icons/react";
 import { api, setCsrf } from "./api";
 import { PAGE_SIZE } from "./lib/constants";
@@ -77,6 +83,8 @@ export default function App() {
     [tokenModal, setTokenModal] = useState(false),
     [oneTime, setOneTime] = useState(""),
     [detail, setDetail] = useState<Task | null>(null);
+  const actionLock = useRef(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const selected = accounts.find((a) => a.id === accountId);
 
   function navigate(path: string) {
@@ -91,6 +99,7 @@ export default function App() {
     setError("");
   }
   function clearSession() {
+    setInitialLoading(true);
     setUser(null);
     setCsrf("");
     setAccounts([]);
@@ -140,6 +149,7 @@ export default function App() {
         `/tasks?offset=${offset}&limit=${PAGE_SIZE}${filter ? "&status=" + filter : ""}`,
       ),
     ]);
+    setInitialLoading(false);
     setAccounts(a);
     setOverview(o);
     setCatalog(c);
@@ -166,6 +176,8 @@ export default function App() {
     return () => clearInterval(id);
   }, [user, page, offset, filter]);
   async function action(name: string, fn: () => Promise<unknown>) {
+    if (actionLock.current) return;
+    actionLock.current = true;
     setBusy(name);
     setError("");
     setNotice("");
@@ -175,6 +187,7 @@ export default function App() {
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      actionLock.current = false;
       setBusy("");
     }
   }
@@ -284,7 +297,10 @@ export default function App() {
       <div className="shell">
         <Sidebar onLogout={logout} />
         <main className="main">
-          <Topbar synced={synced} onRefresh={() => action("refresh", refresh)} />
+          <Topbar
+            synced={synced}
+            onRefresh={() => action("refresh", refresh)}
+          />
           {error && (
             <div className="banner error" role="alert">
               <WarningCircle size={20} />
@@ -304,13 +320,40 @@ export default function App() {
             </div>
           )}
           <div className="page" key={page}>
-            <Page />
+            {initialLoading ? (
+              <section
+                className="panel loading-panel"
+                role="status"
+                aria-busy="true"
+              >
+                <h2>{error ? "暂时无法载入工作空间" : "正在载入工作空间…"}</h2>
+                <p>
+                  {error
+                    ? "请检查连接后重试，已有数据不会丢失。"
+                    : "正在读取账户、任务和报表状态。"}
+                </p>
+                {error ? (
+                  <button
+                    className="secondary"
+                    disabled={!!busy}
+                    onClick={() => action("refresh", refresh)}
+                  >
+                    重新加载
+                  </button>
+                ) : (
+                  <div className="loading-bars" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                )}
+              </section>
+            ) : (
+              <Page />
+            )}
           </div>
           <footer className="main-footer">
-            <span>
-              Amazon Ads Ops Workbench · PostgreSQL 持久化 · API 并发上限{" "}
-              {overview.max_api_concurrency || 3}
-            </span>
+            <span>Amazon Ads Ops Workbench</span>
             <AuthorCredit />
           </footer>
         </main>

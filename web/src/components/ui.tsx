@@ -29,7 +29,7 @@ export function Empty({
   action?: ReactNode;
 }) {
   return (
-    <div className="empty">
+    <div className="empty" role="status">
       <span className="empty-icon">
         <Database size={26} weight="duotone" />
       </span>
@@ -124,19 +124,11 @@ export function Pagination({
   return (
     <div className="pagination">
       <span>{label}</span>
-      <button
-        type="button"
-        disabled={!canPrev}
-        onClick={onPrev}
-      >
+      <button type="button" disabled={!canPrev} onClick={onPrev}>
         <CaretLeft size={14} />
         上一页
       </button>
-      <button
-        type="button"
-        disabled={!canNext}
-        onClick={onNext}
-      >
+      <button type="button" disabled={!canNext} onClick={onNext}>
         下一页
         <CaretRight size={14} />
       </button>
@@ -170,9 +162,9 @@ export function Modal({
       if (e.key === "Tab") {
         const nodes = Array.from(
           dialog.current?.querySelectorAll<HTMLElement>(
-            "button:not(:disabled), input:not(:disabled):not([type=hidden]), textarea:not(:disabled), a[href], summary",
+            "button:not(:disabled), input:not(:disabled):not([type=hidden]), textarea:not(:disabled), select:not(:disabled), [tabindex='0'], a[href], summary",
           ) || [],
-        );
+        ).filter((node) => node.getClientRects().length > 0);
         const first = nodes[0],
           last = nodes[nodes.length - 1];
         if (!first) {
@@ -208,7 +200,9 @@ export function Modal({
   return createPortal(
     <div
       className="modal-backdrop"
-      onMouseDown={(e) => (pressedBackdrop.current = e.target === e.currentTarget)}
+      onMouseDown={(e) =>
+        (pressedBackdrop.current = e.target === e.currentTarget)
+      }
       onClick={(e) => {
         // Portals still bubble through the React tree; keep clicks local.
         e.stopPropagation();

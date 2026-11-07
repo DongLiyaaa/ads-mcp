@@ -367,6 +367,122 @@ def test_unified_rows_normalize_any_header_spelling(header):
     ]
 
 
+def test_full_funnel_default_and_custom_fields():
+    from cli_anything.amazon_ads_ops_workbench.core.unified_reports import (
+        BASE_FIELDS,
+        DEFAULT_METRICS,
+        SELECTABLE_FIELDS,
+    )
+
+    assert len(DEFAULT_METRICS) == 31 and set(DEFAULT_METRICS) <= set(SELECTABLE_FIELDS)
+    args = {"start_date": "2026-10-01", "end_date": "2026-10-07"}
+    default = invoke_contract("reports.create-full-funnel-campaigns", args, ENV, "report_plan")
+    assert default["fields"] == ["date.value", *BASE_FIELDS, *DEFAULT_METRICS]
+    custom = invoke_contract(
+        "reports.create-full-funnel-campaigns",
+        {**args, "fields": ["roas", "METRIC.userReach, dayOfWeek.value", "metric.roas", "campaign.id"]},
+        ENV,
+        "report_plan",
+    )
+    assert custom["fields"] == [
+        "date.value", *BASE_FIELDS, "metric.roas", "metric.userReach", "dayOfWeek.value"
+    ]
+    schema = next(
+        r for r in public_catalog() if r["operation"] == "reports.create-full-funnel-campaigns"
+    )["inputSchema"]["properties"]["fields"]
+    assert schema["type"] == "array"
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        ["metric.notAMetric"],
+        ["campaign.budget"],
+        ["metric.impressionShare"],
+        ["dayOfWeek.value"],
+        ["metric.impressions," + ",".join(f"metric.x{i}" for i in range(3))],
+    ],
+)
+def test_full_funnel_rejects_bad_fields(fields):
+    with pytest.raises(Problem):
+        invoke_contract(
+            "reports.create-full-funnel-campaigns",
+            {"start_date": "2026-10-01", "end_date": "2026-10-07", "fields": fields},
+            ENV,
+            "report_plan",
+        )
+
+
+def test_full_funnel_field_cap():
+    from cli_anything.amazon_ads_ops_workbench.core.unified_reports import (
+        MAX_CUSTOM_FIELDS,
+        SELECTABLE_FIELDS,
+        resolve_fields,
+    )
+
+    many = [f for f in SELECTABLE_FIELDS if f.startswith("metric.")]
+    assert len(resolve_fields(many[:MAX_CUSTOM_FIELDS])) == MAX_CUSTOM_FIELDS
+    with pytest.raises(ValueError):
+        resolve_fields(many[: MAX_CUSTOM_FIELDS + 1])
+
+
+def test_unified_rows_normalize_custom_fields():
+    from cli_anything.amazon_ads_ops_workbench.core.unified_reports import normalize_rows
+
+    assert normalize_rows(
+        [{"metric.roas": 1, "Day of week": "MONDAY", "conversionSource.name": "x", "Purchases (new to brand)": 2}]
+    ) == [{"roas": 1, "dayOfWeek": "MONDAY", "conversionSourceName": "x", "newToBrandPurchases": 2}]
+
+
+def test_ff_campaign_fields_are_local_reference():
+    with patch(
+        "cli_anything.amazon_ads_ops_workbench.core.client.AmazonAdsClient.exchange_refresh_token",
+        side_effect=AssertionError("network"),
+    ):
+        overview = invoke_contract("ff-campaigns.fields", {}, ENV, "read")
+        found = invoke_contract("ff-campaigns.fields", {"search": "roas"}, ENV, "read")
+    assert overview["data"]["totalFields"] > 600 and "fields" not in overview["data"]
+    assert "Reach" in overview["data"]["categories"]
+    roas = {f["field"]: f for f in found["data"]["fields"]}
+    assert roas["metric.roas"]["default"] is True and roas["metric.roas"]["column"] == "roas"
+
+
+def test_ff_campaigns_list_is_read_only_query():
+    calls = []
+
+    def send(self, token, path, label, body=None, profile_id=None):
+        calls.append((path, json.loads(json.dumps(body)), profile_id))
+        if "nextToken" in body:
+            return {"campaigns": [{"campaignId": "2", "name": "b", "state": "PAUSED", "extra": 1}]}
+        return {"campaigns": [{"campaignId": "1", "name": "a", "state": "ENABLED"}], "nextToken": "t"}
+
+    entry = next(r for r in public_catalog() if r["operation"] == "ff-campaigns.list")
+    assert entry["kind"] == "read"
+    with patch(
+        "cli_anything.amazon_ads_ops_workbench.core.client.AmazonAdsClient.exchange_refresh_token",
+        return_value="tok",
+    ), patch(
+        "cli_anything.amazon_ads_ops_workbench.core.client.AmazonAdsClient.list_profiles",
+        return_value=[],
+    ), patch(
+        "cli_anything.amazon_ads_ops_workbench.core.client.AmazonAdsClient._ads_api_send", send
+    ):
+        out = invoke_contract(
+            "ff-campaigns.list", {"states": ["enabled", "PAUSED"], "name": "brand"}, ENV, "read"
+        )
+    assert out["data"]["campaigns"] == [
+        {"campaignId": "1", "name": "a", "state": "ENABLED"},
+        {"campaignId": "2", "name": "b", "state": "PAUSED"},
+    ]
+    assert {c[0] for c in calls} == {"/adsApi/v1/query/campaigns"} and calls[0][2] == "123"
+    assert calls[0][1]["adProductFilter"] == {"include": ["FULL_FUNNEL"]}
+    assert calls[0][1]["stateFilter"] == {"include": ["ENABLED", "PAUSED"]}
+    assert calls[0][1]["nameFilter"] == {"include": ["brand"], "queryTermMatchType": "BROAD_MATCH"}
+    assert calls[1][1]["nextToken"] == "t"
+    with pytest.raises(Problem):
+        invoke_contract("ff-campaigns.list", {"max_results": 0}, ENV, "read")
+
+
 def test_amc_query_plans_without_network():
     with patch(
         "cli_anything.amazon_ads_ops_workbench.core.client.AmazonAdsClient.exchange_refresh_token",
